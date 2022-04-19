@@ -38,15 +38,15 @@ impl PyContext {
         }
     }
 
-    fn rule(&mut self, py: Python, nt: &str, format: &PyAny) -> PyResult<()> {
-        if py.is_instance::<PyString, _>(format)? {
+    fn rule(&mut self, _py: Python, nt: &str, format: &PyAny) -> PyResult<()> {
+        if format.is_instance::<PyString>()? {
             let pystr = <&PyString>::extract(&format)?;
             self.ctx.add_rule(nt, pystr.to_string_lossy().as_bytes());
-        } else if py.is_instance::<PyBytes, _>(format)? {
+        } else if format.is_instance::<PyBytes>()? {
             let pybytes = <&PyBytes>::extract(&format)?;
             self.ctx.add_rule(nt, pybytes.as_bytes());
         } else {
-            return Err(pyo3::exceptions::ValueError::py_err(
+            return Err(pyo3::exceptions::PyValueError::new_err(
                 "format argument should be string or bytes",
             ));
         }
@@ -74,6 +74,7 @@ fn main_(py: Python, grammar_path: &str) -> PyResult<Context> {
 }
 
 pub fn load_python_grammar(grammar_path: &str) -> Context {
+    pyo3::prepare_freethreaded_python();
     let gil = Python::acquire_gil();
     let py = gil.python();
     return main_(py, grammar_path)

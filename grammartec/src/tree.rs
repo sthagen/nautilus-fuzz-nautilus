@@ -25,10 +25,10 @@ use newtypes::{NTermID, NodeID, RuleID};
 use pyo3::prelude::{PyObject, PyResult, Python};
 use pyo3::types::{PyBytes, PyString, PyTuple};
 use pyo3::FromPyObject;
-use recursion_info::RecursionInfo;
-use rule::{PlainRule, Rule, RuleChild, RuleIDOrCustom, ScriptRule, RegExpRule};
 use rand::thread_rng;
 use rand::Rng;
+use recursion_info::RecursionInfo;
+use rule::{PlainRule, RegExpRule, Rule, RuleChild, RuleIDOrCustom, ScriptRule};
 
 enum UnparseStep<'dat> {
     Term(&'dat [u8]),
@@ -92,7 +92,6 @@ impl<'data, 'tree: 'data, 'ctx: 'data, W: Write, T: TreeLike> Unparser<'data, 't
             .unwrap();
     }
     fn script(&mut self, py: Python, num: usize, expr: PyObject) -> PyResult<()> {
-        use pyo3::AsPyRef;
         let bufs = self.buffers.split_off(self.buffers.len() - num);
         let bufs = bufs
             .into_iter()
@@ -100,14 +99,14 @@ impl<'data, 'tree: 'data, 'ctx: 'data, W: Write, T: TreeLike> Unparser<'data, 't
             .collect::<Vec<_>>();
         let byte_arrays = bufs.iter().map(|b| PyBytes::new(py, b));
         let res = expr.call1(py, PyTuple::new(py, byte_arrays))?;
-        if py.is_instance::<PyString, _>(&res)? {
+        if res.as_ref(py).is_instance::<PyString>()? {
             let pystr = <&PyString>::extract(res.as_ref(py))?;
             self.write(pystr.to_string_lossy().as_bytes());
-        } else if py.is_instance::<PyBytes, _>(&res)? {
+        } else if res.as_ref(py).is_instance::<PyBytes>()? {
             let pybytes = <&PyBytes>::extract(res.as_ref(py))?;
             self.write(pybytes.as_bytes());
         } else {
-            return Err(pyo3::exceptions::ValueError::py_err(
+            return Err(pyo3::exceptions::PyValueError::new_err(
                 "script function should return string or bytes",
             ));
         }
@@ -252,10 +251,6 @@ impl Tree {
         return self.rules[n.to_i()].id();
     }
 
-    fn get_rule_or_custom(&self, n: NodeID) -> &RuleIDOrCustom {
-        &self.rules[n.to_i()]
-    }
-
     pub fn subtree_size(&self, n: NodeID) -> usize {
         return self.sizes[n.to_i()];
     }
@@ -381,7 +376,7 @@ impl Tree {
         return Some(ret);
     }
 
-    fn find_recursions_iter(&self, ctx: &Context) -> Vec<(NodeID, NodeID)> {
+    pub fn find_recursions_iter(&self, ctx: &Context) -> Vec<(NodeID, NodeID)> {
         let mut found_recursions = Vec::new();
         //Only search for iterations for up to 10000 nodes
         for i in 1..cmp::min(self.size(), 10000) {
